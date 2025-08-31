@@ -1,0 +1,219 @@
+\documentclass[12pt,addpoints]{exam} % classe exam avec addpoints pour le barème
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{setspace}
+\setlength{\parindent}{0pt}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{float}
+
+% Page de titre simple
+\title{INF2610 \\ TP 1 : Appels système, processus et threads}
+\author{Polytechnique Montréal \\ Auteurs : Antoine Bourassa et Ann-Sophie St-Amand \\ Automne 2025}
+\date{Pondération : 10\% \\ Dates de remise : Voir calendrier du cours}
+
+
+\begin{document}
+
+
+\maketitle
+\vspace{1cm}
+
+
+\section*{Présentation}
+Ce travail pratique a pour but de vous familiariser avec l’environnement de programmation des laboratoires, les appels système de la norme POSIX liés à la gestion de fichiers et à la gestion des processus et threads (création, attente de fin d’exécution et terminaison).
+
+
+Les processus et les threads sont souvent utilisés en informatique pour faire des traitements en parallèle. Par exemple, lors de la compilation d’un programme, les systèmes modernes exploitent largement les processus et les threads pour accélérer le travail. Un projet logiciel est généralement composé de nombreux fichiers source indépendants (par exemple en C ou en C++). Chaque fichier peut être compilé séparément, ce qui permet de lancer plusieurs processus ou threads en parallèle afin de traiter plusieurs unités de compilation simultanément. Ensuite, le système d’exploitation répartit cette charge de travail entre les cœurs du processeur, réduisant considérablement le temps nécessaire par rapport à une compilation séquentielle. C’est pourquoi les outils de compilation comme \texttt{make} ou \texttt{gcc} offrent des options (par exemple \texttt{make -j}) qui exploitent le parallélisme pour améliorer la performance. Ce n’est qu’un exemple d’utilisation parmi tant d’autres. Dans ce laboratoire, vous aurez à appliquer ces concepts dans le contexte d’analyse de fichiers de logs serveur.
+
+
+\section*{Prise en charge du laboratoire}
+Il y a deux options pour préparer l’environnement de travail pour le laboratoire :
+\begin{enumerate}
+\item Utiliser les ordinateurs de laboratoires de Polytechnique.
+\item Télécharger et installer VMware.
+\end{enumerate}
+
+\vspace{0.5cm}
+VMware est un logiciel qui fait la gestion de machines virtuelles (création, copie, suppression, etc.). Il fonctionne sur Windows et sur Mac. Il sera utile tout au long du baccalauréat et pour la suite. Le point négatif est qu’il prend beaucoup de ressources sur un ordinateur. Ceci étant dit, voici les instructions pour télécharger VMware :
+
+
+\url{https://www.polymtl.ca/gigl/guides-informatiques#vmware}
+
+
+\vspace{0.5cm}
+La prochaine étape est de créer la machine virtuelle à partir du fichier disponible sur moodle dans la section TP1. Il existe plein de tutoriels en ligne pour créer une machine virtuelle à partir d’un fichier. Le répertoire de fichier pour le travail pratique se trouve sur le bureau de la machine virtuelle nouvellement créée. 
+\vspace{0.5cm}
+Prenez quelques instants pour vous familiariser avec la structure du répertoire sur lequel vous travaillerez durant ce TP. Vous trouverez dans le répertoire courant 4 fichiers représentant chacun une section du TP. Chaque section vous sera présentée plus bas. Il y a aussi un fichier Makefile qui peut être utilisé pour compiler et exécuter le code, mais ne doit pas être changé.
+
+
+
+Il est conseillé de lire l’énoncé en entier avant de commencer le TP. Il n’est pas demandé de traiter les erreurs éventuelles liées aux appels système. Par contre, si besoin est, à chaque fois que votre programme effectue un appel système (directement ou via une fonction de librairie), vous avez la possibilité d’afficher un message d’erreur explicite en cas d’échec de cet appel système. Pour ce faire, il vous suffit d’utiliser la fonction \texttt{perror} après l’appel système (ou l’appel de fonction de librairie). Consultez sa documentation !
+
+\vspace{1cm}
+\section*{Mise en situation}
+Votre équipe fait partie d’un service de supervision et sécurité informatique responsable de surveiller en continu l’état des serveurs d’une grande organisation. Chaque jour, ceux-ci génèrent plusieurs gigaoctets de journaux système (logs) contenant des informations sur les connexions, les opérations réussies ou échouées, ainsi que les erreurs rencontrées.
+
+
+Lorsqu’un incident critique survient (panne de service, intrusion potentielle, défaillance matérielle), les analystes doivent être capables de parcourir rapidement ces fichiers volumineux afin de détecter :
+
+
+\begin{itemize}
+\item Le nombre d’erreurs critiques (\texttt{CRITICAL}, \texttt{ERROR}),
+\item La présence de motifs suspects (\texttt{FAILED LOGIN}, \texttt{segmentation fault}, etc.),
+\item Des anomalies dans la structure ou le format des entrées.
+\end{itemize}
+
+\vspace{0.5cm}
+Dans ce contexte, il est souvent nécessaire de compter efficacement les occurrences de certains types d’erreurs dans un fichier de logs donné, ou encore de rechercher en parallèle différents motifs. Pour traiter ces volumes de données rapidement, on fait appel à des arbres de processus et à des threads, qui permettent de diviser la charge de travail et de l’exécuter en parallèle.
+
+
+\vspace{0.5cm}
+Dans ce premier TP, vous aurez à :
+\begin{enumerate}
+\item Manipuler des fichiers de logs et en extraire des informations en utilisant des appels système ;
+\item Mettre en place un programme qui crée et organise des processus et des threads afin d’effectuer des traitements parallèles ;
+\item Comparer les temps d’exécution de vos différentes approches (processus vs threads) ;
+\item Analyser la performance de votre programme selon plusieurs métriques définies dans les sections à venir.
+\end{enumerate}
+
+\vspace{1cm}
+\section{Appels système}
+
+
+\texttt{ps} est une commande qui donne la liste des processus en cours sur le système d’exploitation. Essayez de rediriger sa sortie vers un fichier .txt avec \texttt{>>}.
+
+
+En créant un fichier avec la commande \texttt{touch}, \texttt{vi} ou \texttt{nano}, c’est aussi un appel système. Essayez de créer un fichier qui s’appelle \texttt{section1\_2.txt}.
+
+
+Les fonctions de gestion de fichiers en C sont souvent utiles et font aussi des appels systèmes. L’exercice est de créer une fonction en C qui fait la lecture d’un fichier (le fichier s’appelle \texttt{mots.txt} et est dans le même répertoire que le code), calcule le nombre de mots dans le fichier et retourne la somme dans un fichier en écriture qui s’appellera \texttt{section2\_2}.
+
+
+\vspace{1cm}
+\section{Arbre de processus}
+On vous demande d’extraire le nombre d’erreurs \texttt{CRITICAL}, \texttt{ERROR} et \texttt{FAILED LOGIN} de deux fichiers de logs générés par le serveur (nom des 2 fichiers de logs qu’ils doivent traiter). Vous devez respecter certaines contraintes :
+\begin{itemize}
+\item L’analyse des deux fichiers doit se faire en parallèle ;
+\item Dans un même fichier, la détection des trois types d’erreurs doit se faire en une seule lecture.
+\end{itemize}
+
+
+Pour accélérer le traitement, on vous demande de diviser la lecture d’un même fichier en blocs. À partir de l’entrée standard, vous devez entrer un nombre \texttt{n} de blocs. Le fichier sera alors divisé en \texttt{n} sections, et chaque processus aura à analyser un bloc (Indice : utiliser \texttt{lseek} de POSIX). L’idée est d’éviter que chaque processus lise le fichier en entier. Votre programme doit fonctionner avec n’importe quelle valeur de \texttt{n} plus grande ou égale à 1.
+
+
+Vous devez donc bâtir un arbre de processus pour exécuter ces tâches. Lorsque la lecture des deux fichiers est terminée, le processus parent du programme doit écrire dans un fichier de texte \texttt{RESULT\_PROCESS.txt} les résultats (réutiliser vos fonctions de lecture et d’écriture de la section 1 au besoin). Chaque processus parent doit attendre la terminaison de ses enfants avant de lui-même se terminer. Aussi, lorsqu’un processus enfant se crée, il doit afficher son PID sur la sortie standard. L’affichage de la sortie standard doit uniquement se faire à la fin du programme, et non au fur et à mesure que les processus sont créés.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{image (9).png}
+    \caption{Exemple de sortie du terminal}
+    \label{fig:placeholder}
+\end{figure}
+
+
+
+\subsection*{Question 2.1}
+Ajoutez à votre rapport un schéma de l’arbre de processus créé. Indiquez directement sur le schéma le rôle de chaque niveau de processus. Intégrez aussi la valeur n de blocs de lecture (0.5 point).
+
+\subsection*{Question 2.2}
+Exécutez quelques fois de suite votre programme avec une même valeur de \texttt{n}. Il est possible que certains PID soient affichés dans un ordre différent d’une exécution à l’autre, et que certains soient affichés dans le même ordre. Expliquez brièvement pourquoi (1 point).
+
+
+\subsection*{Question 2.3}
+Il vous était demandé d’afficher les PID de tous les processus seulement à la fin du programme. Expliquez la différence de fonctionnement de l’appel système \texttt{write} et de la fonction \texttt{printf} de la librairie standard, et justifiez pourquoi vous avez utilisé l’un ou l’autre dans votre code (0.5 point).
+
+
+\subsection*{Question 2.4}
+Expliquez comment vous avez fait pour communiquer les valeurs d’un processus enfant vers un processus parent. Votre explication devrait aborder le concept de COW (Copy On Write) (1 point).
+
+
+
+\vspace{1cm}
+\section{Arbre de threads}
+Vous devez refaire le même traitement qu’à la section 2, mais cette fois-ci en utilisant des threads POSIX. La lecture des blocs doit se faire par des threads concurrents (Indice : utiliser \texttt{pread} de POSIX).
+
+
+Cette fois-ci, le processus à la racine du programme doit écrire ses résultats dans un fichier nommé \texttt{RESULT\_THREADS.txt}.
+
+
+\subsection*{Question 3.1}
+Ajoutez à votre rapport un schéma de l’arbre de threads créé. Indiquez directement sur le schéma le rôle de chaque niveau de threads. Intégrez aussi la valeur \texttt{n} de blocs de lecture (0.5 point).
+
+
+\subsection*{Question 3.2}
+Expliquez pourquoi l’utilisation de la fonction \texttt{read} par les threads aurait été problématique avec un seul descripteur de fichier. Expliquez aussi comment \texttt{pread} règle ce problème (1 point).
+
+
+\subsection*{Question 3.3}
+Expliquez comment vous avez fait pour communiquer les valeurs d’un thread vers son processus parent. Expliquez pourquoi c’est différent de votre solution de la section 2 (1 point).
+
+
+\subsection*{Question 3.4}
+Dans quelques semaines, vous allez voir en classe le concept de synchronisation. À l’aide d’une petite recherche en ligne, expliquez brièvement dans vos mots ce qu’est la synchronisation, à quoi ça sert, et pourquoi c’est surtout utilisé avec les threads. N’oubliez pas d’indiquer vos sources (0.5 point).
+
+
+
+\vspace{1cm}
+\section{Analyse des performances}
+Deux ordinateurs peuvent présenter des performances très différentes en matière de parallélisme en raison de leur système d’exploitation et de leurs caractéristiques matérielles. Par exemple, un processeur doté de plusieurs cœurs et d’un grand nombre de threads matériels (hyper-threading) permet d’exécuter plusieurs tâches simultanément, alors qu’un processeur plus ancien à un seul cœur sera limité. De plus, la gestion du parallélisme par l’OS joue un rôle important : certains systèmes optimisent mieux la planification des processus et des threads, la répartition sur les cœurs et l’utilisation de la mémoire. Ainsi, deux programmes identiques peuvent s’exécuter beaucoup plus rapidement sur une machine moderne multicœur avec un OS optimisé que sur un ordinateur moins puissant ou mal configuré.
+
+
+\subsection*{Question 4.1}
+Exécutez votre programme de la section 2, puis celui de la section 3, le tout sur la même machine. Chronométrez les deux exécutions (voir la fonction \texttt{get\_time()} du fichier …). Commentez la différence de temps d’exécution en utilisant des processus et des threads (0.5 point).
+
+
+\subsection*{Question 4.2}
+Exécutez votre programme de la section 2 sur deux machines différentes. Chronométrez les deux exécutions. Commentez la différence de temps d’exécution en abordant les différences matérielles des deux machines (0.5 point).
+
+
+\subsection*{Question 4.3}
+Exécutez votre programme de la section 3 sur deux machines différentes. Chronométrez les deux exécutions. Commentez la différence de temps d’exécution en abordant les différences matérielles des deux machines (0.5 point).
+
+
+\subsection*{Question 4.4}
+Selon vous, dans quelles situations est-il préférable d’utiliser des processus et dans quelles situations est-il mieux d’utiliser des threads ? Utilisez des exemples pour expliquer votre raisonnement (0.5 point).
+
+
+\vspace{1cm}
+\section*{Barème}
+Important : Un programme qui ne compile pas entraine automatiquement une perte de la moitié des points de code attribués à cette section.
+\vspace{0.5cm}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|l|r|}
+\hline
+Section 1 & / 2 \\ \hline
+Section 2 &
+\begin{tabular}[c]{@{}l r@{}}
+Code & 4 \\
+Questions & 3 \\ \hline
+Total & /7
+\end{tabular} \\ \hline
+Section 3 &
+\begin{tabular}[c]{@{}l r@{}}
+Code & 4 \\
+Questions & 3 \\ \hline
+Total & /7
+\end{tabular} \\ \hline
+Section 4 &
+\begin{tabular}[c]{@{}l r@{}}
+Questions & 2 \\ \hline
+Total & /2
+\end{tabular} \\ \hline
+Qualité du code &
+\begin{tabular}[c]{@{}l r@{}}
+Total & /2
+\end{tabular} \\ \hline
+\end{tabular}
+\end{table}
+
+
+
+\end{document}
